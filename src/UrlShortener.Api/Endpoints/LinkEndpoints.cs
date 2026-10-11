@@ -19,6 +19,8 @@ internal static class LinkEndpoints
             .RequireAuthorization(ManagePolicy);
 
         links.MapPost("/", CreateAsync)
+            .RequireRateLimiting(Security.RateLimiting.CreatePolicy)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
             .WithName("CreateLink")
             .WithSummary("Create a short link")
             .Produces<LinkResponse>(StatusCodes.Status201Created)

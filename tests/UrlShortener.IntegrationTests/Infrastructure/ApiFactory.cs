@@ -28,6 +28,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Auth:ApiKeys:0", ApiKey);
         builder.UseSetting("Shortener:PublicBaseUrl", PublicBaseUrl);
         builder.UseSetting("Shortener:VisitorHashSalt", "integration-test-salt-0123456789");
+        // Functional tests must not trip limits; RateLimitTests lowers them explicitly.
+        builder.UseSetting("RateLimiting:CreatePerMinute", "100000");
+        builder.UseSetting("RateLimiting:RedirectPerMinute", "1000000");
+        builder.UseSetting("Security:BlockedDomains:0", "blocked.example");
 
         builder.ConfigureTestServices(services =>
         {

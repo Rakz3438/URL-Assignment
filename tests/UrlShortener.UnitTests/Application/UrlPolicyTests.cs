@@ -7,7 +7,8 @@ namespace UrlShortener.UnitTests.Application;
 /// <summary>Security table for decision A-8. Each blocked case documents the attack it prevents.</summary>
 public class UrlPolicyTests
 {
-    private readonly UrlPolicy _policy = new(Options.Create(new ShortenerOptions { PublicBaseUrl = "https://sho.rt" }));
+    private readonly UrlPolicy _policy = new(Options.Create(new ShortenerOptions { PublicBaseUrl = "https://sho.rt" }),
+        DomainBlocklist.FromDomains("evil.example", "bücher-phish.example"));
 
     [Theory]
     [InlineData("https://example.com", "https://example.com/")]
@@ -62,6 +63,24 @@ public class UrlPolicyTests
         result.IsSuccess.Should().BeFalse(because);
         result.Error!.Code.Should().Be("url.invalid");
     }
+
+    [Theory]
+    [InlineData("https://evil.example/login")]
+    [InlineData("https://EVIL.example./x")]
+    [InlineData("https://deep.sub.evil.example/")]
+    [InlineData("https://bücher-phish.example/")] // Unicode URL vs Unicode blocklist entry, compared in punycode
+    public void Validate_BlockedDomainOrSubdomain_ReturnsBlocked(string url)
+    {
+        var result = _policy.Validate(url);
+
+        result.Error!.Code.Should().Be("url.blocked");
+    }
+
+    [Theory]
+    [InlineData("https://notevil.example/")]   // suffix match must be on a label boundary
+    [InlineData("https://evil.example.com/")]  // different registrable domain
+    public void Validate_LookalikeButNotBlocked_IsAllowed(string url) =>
+        _policy.Validate(url).IsSuccess.Should().BeTrue();
 
     [Fact]
     public void Validate_UrlLongerThan2048_ReturnsValidationError()

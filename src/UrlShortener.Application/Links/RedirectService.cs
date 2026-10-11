@@ -16,11 +16,13 @@ public sealed class RedirectService
     private readonly ILinkCache _cache;
     private readonly IClickSink _clickSink;
     private readonly ClickEventFactory _clickFactory;
+    private readonly DomainBlocklist _blocklist;
     private readonly TimeProvider _clock;
 
     public RedirectService(IShortLinkRepository repository, ILinkCache cache, IClickSink clickSink,
-        ClickEventFactory clickFactory, TimeProvider clock)
+        ClickEventFactory clickFactory, DomainBlocklist blocklist, TimeProvider clock)
     {
+        _blocklist = blocklist;
         _repository = repository;
         _cache = cache;
         _clickSink = clickSink;
@@ -45,6 +47,13 @@ public sealed class RedirectService
         if (snapshot.IsExpired(now))
         {
             return Error.Gone("This short link has expired.");
+        }
+
+        // Checked at redirect time too, so blocklisting a domain also stops links created before it was listed,
+        // without touching the database (scope decision S2).
+        if (_blocklist.IsBlocked(new Uri(snapshot.TargetUrl)))
+        {
+            return Error.Blocked();
         }
 
         // Fire-and-forget by contract: TryEnqueue never blocks or throws. A full buffer drops the click

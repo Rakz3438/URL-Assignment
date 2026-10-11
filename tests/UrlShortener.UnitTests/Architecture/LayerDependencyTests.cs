@@ -36,8 +36,10 @@ public class LayerDependencyTests
             .Where(t => t.Namespace?.Contains(".Migrations", StringComparison.Ordinal) != true)
             .Select(t => t.Name);
 
-        // Only composition and DbContext types are public; implementations stay internal behind ports.
+        // Only composition entry points and DbContext types are public; implementations stay internal behind ports.
+        // Additions to this list are deliberate decisions (reviewed), not drift.
         publicTypes.Should().BeSubsetOf(
-            ["DependencyInjection", "DatabaseProvider", "LinkDbContext", "SqliteLinkDbContext", "PostgresLinkDbContext"]);
+            ["DependencyInjection", "DatabaseProvider", "LinkDbContext", "SqliteLinkDbContext", "PostgresLinkDbContext",
+             "ObservabilityExtensions", "HealthCheckExtensions"]);
     }
 }

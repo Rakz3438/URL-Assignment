@@ -67,4 +67,8 @@ internal sealed class CacheOptions
     /// <summary>Upper bound on any single cache call. Past it, the redirect falls back to the database.</summary>
     [Range(1, 10_000)]
     public int OperationTimeoutMs { get; set; } = 100;
+
+    /// <summary>How long the circuit stays open (Redis skipped) before a probe call is allowed.</summary>
+    [Range(1, 3_600)]
+    public int BreakDurationSeconds { get; set; } = 15;
 }

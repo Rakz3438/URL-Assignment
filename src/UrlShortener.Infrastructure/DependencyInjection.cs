@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using UrlShortener.Application.Abstractions;
 using UrlShortener.Infrastructure.Analytics;
 using UrlShortener.Infrastructure.Caching;
@@ -33,12 +35,12 @@ public static class DependencyInjection
 
         if (provider == DatabaseProvider.Postgres)
         {
-            services.AddDbContext<PostgresLinkDbContext>(o => o.UseNpgsql(connectionString));
+            services.AddDbContext<PostgresLinkDbContext>(o => o.UseNpgsql(connectionString).ConfigureWarnings(QuietExpectedFailures));
             services.AddScoped<LinkDbContext>(sp => sp.GetRequiredService<PostgresLinkDbContext>());
         }
         else
         {
-            services.AddDbContext<SqliteLinkDbContext>(o => o.UseSqlite(connectionString));
+            services.AddDbContext<SqliteLinkDbContext>(o => o.UseSqlite(connectionString).ConfigureWarnings(QuietExpectedFailures));
             services.AddScoped<LinkDbContext>(sp => sp.GetRequiredService<SqliteLinkDbContext>());
         }
 
@@ -64,13 +66,21 @@ public static class DependencyInjection
             });
         }
 
-        services.AddSingleton<ILinkCache, DistributedLinkCache>();
+        services.AddSingleton<DistributedLinkCache>();
+        services.AddSingleton<ILinkCache>(sp => sp.GetRequiredService<DistributedLinkCache>());
+        services.AddSingleton<ICacheHealth>(sp => sp.GetRequiredService<DistributedLinkCache>());
 
         services.AddMetrics();
         services.AddSingleton<ClickPipelineMetrics>();
         services.AddOptions<KafkaOptions>().Bind(configuration.GetSection(KafkaOptions.SectionName)).ValidateDataAnnotations();
         return services;
     }
+
+    /// <summary>EF Core logs every failed command at Error, including unique violations we handle as 409 (measured: 40 Error
+    /// lines for 20 expected conflicts, i.e. false Splunk alerts). Demoted to Debug: genuine failures still surface, once, through
+    /// our own handlers (DependencyFailureMiddleware, the global exception handler, publisher/worker retry logs).</summary>
+    private static void QuietExpectedFailures(WarningsConfigurationBuilder warnings) =>
+        warnings.Log((RelationalEventId.CommandError, LogLevel.Debug), (CoreEventId.SaveChangesFailed, LogLevel.Debug));
 
     /// <summary>API side of the click pipeline (URL-11): non-blocking sink on the redirect path plus a background
     /// publisher whose destination depends on <c>Analytics__Mode</c> (Direct = database, Kafka = topic).</summary>

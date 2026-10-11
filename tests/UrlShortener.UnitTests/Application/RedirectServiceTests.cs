@@ -18,8 +18,9 @@ public class RedirectServiceTests
     private readonly CollectingClickSink _sink = new();
     private readonly ClickContext _context = new("https://ref.example/", "curl/8", "203.0.113.1");
 
-    private RedirectService CreateService() => new(_repo, _cache, _sink,
-        new ClickEventFactory(Options.Create(new ShortenerOptions { VisitorHashSalt = "unit-test-salt-0123456789" })), _clock);
+    private RedirectService CreateService(params string[] blocked) => new(_repo, _cache, _sink,
+        new ClickEventFactory(Options.Create(new ShortenerOptions { VisitorHashSalt = "unit-test-salt-0123456789" })),
+        DomainBlocklist.FromDomains(blocked), _clock);
 
     [Fact]
     public async Task ResolveAsync_CacheHit_DoesNotReadDatabase()
@@ -67,6 +68,18 @@ public class RedirectServiceTests
         var result = await CreateService().ResolveAsync("abc1234", _context, default);
 
         result.Error!.Type.Should().Be(ErrorType.Gone);
+        _sink.Clicks.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DomainBlockedAfterCreation_ReturnsBlockedWithoutClick()
+    {
+        await _cache.SetAsync(new LinkSnapshot("abc1234", "https://cdn.later-bad.example/x", null), default);
+
+        var result = await CreateService("later-bad.example").ResolveAsync("abc1234", _context, default);
+
+        result.Error!.Code.Should().Be("link.blocked");
+        result.Error.Type.Should().Be(ErrorType.Gone);
         _sink.Clicks.Should().BeEmpty();
     }
 

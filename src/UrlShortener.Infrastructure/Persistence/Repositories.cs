@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using UrlShortener.Application.Abstractions;
+using UrlShortener.Application.Common;
 using UrlShortener.Domain.Analytics;
 using UrlShortener.Domain.Links;
 
@@ -14,17 +15,17 @@ internal sealed class ShortLinkRepository : IShortLinkRepository
     public ShortLinkRepository(LinkDbContext db) => _db = db;
 
     public Task<ShortLink?> GetByCodeAsync(string code, CancellationToken cancellationToken) =>
-        _db.ShortLinks.AsNoTracking().FirstOrDefaultAsync(x => x.Code == code, cancellationToken);
+        Guard(() => _db.ShortLinks.AsNoTracking().FirstOrDefaultAsync(x => x.Code == code, cancellationToken));
 
     public Task<ShortLink?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken) =>
-        _db.ShortLinks.AsNoTracking().FirstOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey, cancellationToken);
+        Guard(() => _db.ShortLinks.AsNoTracking().FirstOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey, cancellationToken));
 
     public async Task<bool> TryAddAsync(ShortLink link, CancellationToken cancellationToken)
     {
         var entry = _db.ShortLinks.Add(link);
         try
         {
-            await _db.SaveChangesAsync(cancellationToken);
+            await Guard(() => _db.SaveChangesAsync(cancellationToken));
             return true;
         }
         catch (DbUpdateException ex) when (UniqueViolation.Is(ex))
@@ -41,9 +42,43 @@ internal sealed class ShortLinkRepository : IShortLinkRepository
     public async Task UpdateAsync(ShortLink link, CancellationToken cancellationToken)
     {
         _db.ShortLinks.Update(link);
-        await _db.SaveChangesAsync(cancellationToken);
-        _db.Entry(link).State = EntityState.Detached;
+        try
+        {
+            await Guard(() => _db.SaveChangesAsync(cancellationToken));
+        }
+        finally
+        {
+            _db.Entry(link).State = EntityState.Detached;
+        }
     }
+
+    /// <summary>Translates connectivity failures into <see cref="DependencyUnavailableException"/> (→ 503).
+    /// Unique violations pass through untouched: they are expected outcomes, not outages.</summary>
+    private static async Task<T> Guard<T>(Func<Task<T>> operation)
+    {
+        try
+        {
+            return await operation();
+        }
+        catch (Exception ex) when (DatabaseOutage.Is(ex))
+        {
+            throw new DependencyUnavailableException("Database", ex);
+        }
+    }
+}
+
+internal static class DatabaseOutage
+{
+    public static bool Is(Exception ex) => ex switch
+    {
+        DbUpdateException update when UniqueViolation.Is(update) => false,
+        DbUpdateException { InnerException: { } inner } => Is(inner),
+        NpgsqlException => true,               // connection refused, reset, auth, server shutting down
+        SqliteException sqlite => sqlite.SqliteErrorCode is 14 /* CANTOPEN */ or 5 /* BUSY */ or 10 /* IOERR */,
+        TimeoutException => true,
+        InvalidOperationException { InnerException: { } inner } => Is(inner), // EF wraps some provider failures
+        _ => false,
+    };
 }
 
 /// <summary>Idempotent batch ingestion (URL-11), shared by the zero-setup publisher and the Analytics Worker.

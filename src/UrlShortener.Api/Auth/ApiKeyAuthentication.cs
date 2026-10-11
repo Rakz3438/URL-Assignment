@@ -23,6 +23,10 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
     public const string SchemeName = "ApiKey";
     public const string HeaderName = "X-Api-Key";
 
+    /// <summary>Non-secret fingerprint of the presented key (first 48 bits of its SHA-256), used to partition rate
+    /// limits per key and safe to log. The key itself is never stored in claims or logs.</summary>
+    public const string KeyIdClaim = "key_id";
+
     private readonly byte[][] _keyHashes;
 
     public ApiKeyAuthenticationHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger,
@@ -55,7 +59,8 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
             return Task.FromResult(AuthenticateResult.Fail("Invalid API key."));
         }
 
-        var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, "api-client")], SchemeName);
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.Name, "api-client"), new Claim(KeyIdClaim, Convert.ToHexString(presented, 0, 6))], SchemeName);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
     }
 }

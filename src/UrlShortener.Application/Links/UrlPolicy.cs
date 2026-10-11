@@ -14,10 +14,12 @@ namespace UrlShortener.Application.Links;
 public sealed class UrlPolicy
 {
     private readonly string _selfHost;
+    private readonly DomainBlocklist _blocklist;
 
-    public UrlPolicy(IOptions<ShortenerOptions> options)
+    public UrlPolicy(IOptions<ShortenerOptions> options, DomainBlocklist blocklist)
     {
         _selfHost = new Uri(options.Value.PublicBaseUrl).IdnHost;
+        _blocklist = blocklist;
     }
 
     /// <summary>Validates and canonicalizes the URL. On success the value is the normalized absolute URL.</summary>
@@ -63,6 +65,11 @@ public sealed class UrlPolicy
         if (host.Equals(_selfHost, StringComparison.OrdinalIgnoreCase))
         {
             return Invalid("URLs pointing to this service are not allowed.");
+        }
+
+        if (_blocklist.IsBlocked(host))
+        {
+            return Error.Validation("url.blocked", "This destination domain is blocked.");
         }
 
         // Uri normalizes alternate IPv4 notations (decimal, hex, octal) into dotted form, so

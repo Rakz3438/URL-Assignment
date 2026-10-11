@@ -10,6 +10,8 @@ internal static class RedirectEndpoints
     {
         // Public, unauthenticated. Literal routes (/api, /health, /swagger) take precedence over this pattern.
         app.MapGet("/{code}", RedirectAsync)
+            .RequireRateLimiting(Security.RateLimiting.RedirectPolicy)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
             .WithName("FollowLink")
             .WithTags("Redirect")
             .WithSummary("Redirect to the link's destination (302)")

@@ -16,7 +16,22 @@ public sealed record Error(ErrorType Type, string Code, string Message)
     public static Error NotFound(string message = "Short link not found.") => new(ErrorType.NotFound, "link.not_found", message);
     public static Error Conflict(string code, string message) => new(ErrorType.Conflict, code, message);
     public static Error Gone(string message) => new(ErrorType.Gone, "link.expired", message);
+    public static Error Blocked() => new(ErrorType.Gone, "link.blocked", "This link's destination has been blocked.");
     public static Error Unprocessable(string code, string message) => new(ErrorType.Unprocessable, code, message);
+}
+
+/// <summary>A required backing service (the database) is unreachable. Thrown by infrastructure adapters so the API
+/// can answer 503 + Retry-After instead of a generic 500 (scope decision R1). The inner exception keeps the detail.</summary>
+public sealed class DependencyUnavailableException : Exception
+{
+    public DependencyUnavailableException(string dependency, Exception innerException)
+        : base($"{dependency} is unavailable.", innerException) => Dependency = dependency;
+
+    public DependencyUnavailableException() { Dependency = "unknown"; }
+
+    public DependencyUnavailableException(string message) : base(message) { Dependency = "unknown"; }
+
+    public string Dependency { get; }
 }
 
 /// <summary>Result type for expected outcomes; exceptions are reserved for unexpected failures.</summary>

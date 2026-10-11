@@ -18,7 +18,7 @@ public class LinkServiceTests
     private readonly ShortenerOptions _options = new() { PublicBaseUrl = "https://sho.rt", MaxCodeGenerationAttempts = 3 };
 
     private LinkService CreateService(params string[] codes) =>
-        new(_repo, _cache, new ScriptedCodeGenerator(codes), new UrlPolicy(Options.Create(_options)), _clock,
+        new(_repo, _cache, new ScriptedCodeGenerator(codes), new UrlPolicy(Options.Create(_options), DomainBlocklist.FromDomains()), _clock,
             Options.Create(_options), NullLogger<LinkService>.Instance);
 
     [Fact]

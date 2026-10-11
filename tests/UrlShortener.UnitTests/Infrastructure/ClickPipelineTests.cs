@@ -126,6 +126,38 @@ public class DistributedLinkCacheTests
         watch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(2), "a hung cache must not hang the redirect");
     }
 
+    [Fact]
+    public async Task GetAsync_CacheKeepsFailing_CircuitOpensAndStopsCallingRedis()
+    {
+        var failing = new FailingCache();
+        var cache = Create(failing);
+
+        for (var i = 0; i < 50; i++)
+        {
+            (await cache.GetAsync("abc1234", default)).Should().BeNull();
+        }
+
+        cache.IsCircuitOpen.Should().BeTrue();
+        failing.Calls.Should().BeLessThanOrEqualTo(10, "after the breaker opens, Redis is not called (no per-request timeout or log)");
+    }
+
+    [Fact]
+    public async Task GetAsync_AfterBreakDuration_ProbesRedisAgain()
+    {
+        var failing = new FailingCache();
+        var cache = Create(failing);
+        for (var i = 0; i < 20; i++)
+        {
+            await cache.GetAsync("abc1234", default);
+        }
+
+        var callsWhileOpen = failing.Calls;
+        _clock.Advance(TimeSpan.FromSeconds(16));
+        await cache.GetAsync("abc1234", default);
+
+        failing.Calls.Should().Be(callsWhileOpen + 1, "a half-open probe is allowed after the break duration");
+    }
+
     private sealed class SpyCache : IDistributedCache
     {
         public DistributedCacheEntryOptions? LastOptions { get; private set; }
@@ -146,7 +178,17 @@ public class DistributedLinkCacheTests
 
     private sealed class FailingCache : IDistributedCache
     {
-        private static InvalidOperationException Down => new("Simulated Redis outage");
+        private int _calls;
+        public int Calls => _calls;
+        private InvalidOperationException Down
+        {
+            get
+            {
+                Interlocked.Increment(ref _calls);
+                return new InvalidOperationException("Simulated Redis outage");
+            }
+        }
+
         public byte[]? Get(string key) => throw Down;
         public Task<byte[]?> GetAsync(string key, CancellationToken token = default) => throw Down;
         public void Refresh(string key) => throw Down;
@@ -168,6 +210,22 @@ public class DistributedLinkCacheTests
         public Task RemoveAsync(string key, CancellationToken token = default) => Task.CompletedTask;
         public void Set(string key, byte[] value, DistributedCacheEntryOptions options) { }
         public Task SetAsync(string key, byte[] value, DistributedCacheEntryOptions options, CancellationToken token = default) => Task.CompletedTask;
+    }
+}
+
+public class DatabaseOutageTests
+{
+    [Fact]
+    public async Task GetByCodeAsync_DatabaseUnreachable_ThrowsDependencyUnavailable()
+    {
+        await using var db = new SqliteLinkDbContext(new DbContextOptionsBuilder<SqliteLinkDbContext>()
+            .UseSqlite("Data Source=/nonexistent-dir/unreachable.db;Mode=ReadOnly").Options);
+        var repo = new ShortLinkRepository(db);
+
+        var act = () => repo.GetByCodeAsync("abc1234", default);
+
+        (await act.Should().ThrowAsync<UrlShortener.Application.Common.DependencyUnavailableException>())
+            .Which.InnerException.Should().BeOfType<SqliteException>();
     }
 }
 
@@ -221,5 +279,18 @@ public sealed class EfClickIngestorTests : IAsyncLifetime
         var stats = await _db.DailyStats.OrderBy(x => x.Code).ThenBy(x => x.Day).ToListAsync();
         stats.Select(x => (x.Code, x.Day.ToString("yyyy-MM-dd"), x.Clicks)).Should().Equal(
             ("abc1234", "2026-10-11", 1L), ("abc1234", "2026-10-12", 1L), ("xyz9876", "2026-10-11", 1L));
+    }
+}
+
+public class LogThrottleTests
+{
+    [Fact]
+    public void ShouldLog_BurstWithinInterval_LogsOnceAndCountsTheRest()
+    {
+        var throttle = new UrlShortener.Infrastructure.Observability.LogThrottle(TimeSpan.FromHours(1));
+
+        var logged = Enumerable.Range(0, 1000).Count(_ => throttle.ShouldLog(out long _));
+
+        logged.Should().Be(1);
     }
 }

@@ -10,6 +10,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<DomainBlocklist>();
         services.AddSingleton<UrlPolicy>();
         services.AddSingleton<ClickEventFactory>();
         services.AddScoped<LinkService>();
