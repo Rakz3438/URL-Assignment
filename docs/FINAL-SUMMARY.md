@@ -105,7 +105,7 @@ tests: IDN hosts breaking redirects (unit), forged `X-Forwarded-For` trusted (in
 - **Poison messages are skipped and counted**, not sent to a dead-letter topic.
 - **Top-N referrers/browsers and unique visitors still scan raw clicks** in the 30-day window (off the hot path).
 - **SQLite migration does not backfill** legacy clicks (PostgreSQL does, verified on 295,942 rows).
-- **CI actions are pinned to major tags**, not commit SHAs.
+- **CI actions are pinned to major tags**, not commit SHAs (runner OS is pinned to `ubuntu-24.04`). CI verified green on GitHub (run #1: 3/3 jobs).
 - **Container images are ~550 MB** (Debian base); chiseled images would cut size and attack surface.
 
 ## 8. Engineer ownership: where judgment overrode the AI
