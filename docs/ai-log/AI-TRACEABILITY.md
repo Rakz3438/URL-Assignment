@@ -46,6 +46,9 @@ in `CLAUDE.md`.
 | 33 | 2026-10-11 | URL-16 | Circuit breaker for Redis | Polly breaker, 10 s sampling window | **Rejected** (own tuning) | Chaos test: breaker took 9 s to open, outcome worse than no breaker (6.1k req/s, p99 205 ms). Root-caused from the log timeline; 2 s window + log throttle → 3 log lines per outage, p99 11.5 ms |
 | 34 | 2026-10-11 | URL-18 | Readiness semantics on DB outage | AI flagged §8 ("fail readiness") as a cascading-failure risk with a shared DB | **Accepted** | Engineer approved Degraded and amended §8. Config switch retained; both behaviors tested |
 | 35 | 2026-10-11 | URL-18 | Observability overhead | Measured −13% (instrumentation) / −24% (100% trace export) | **Accepted** | Added trace sampling (10% default outside Development) instead of claiming observability is free |
+| 36 | 2026-10-11 | URL-19 | Containerize API + worker | Multi-stage Dockerfiles (non-root UID 1654), compose "app" profile: one-shot migrate, 2 API replicas, worker, nginx | **Edited** | Replaced a bare `--migrate-only` CLI flag with `Database__MigrateOnly` config (works identically in compose/K8s, no arg-parsing ambiguity). Verified end-to-end: migrate exit 0, both replicas share load, forged X-Forwarded-For through nginx counted as 1 visitor |
+| 37 | 2026-10-11 | URL-20 | CI pipeline | GitHub Actions: quality gate, coverage artifact, image builds with non-root assertion, kubeconform | **Accepted** | Same script locally and in CI. Actions pinned to major tags (SHA pinning noted as a follow-up for supply-chain hardening) |
+| 38 | 2026-10-11 | URL-21 | Kubernetes manifests | Deployment/Service/HPA/PDB, migrate Job, worker, NetworkPolicy, Ingress; restricted Pod Security | **Accepted** | Liveness checks process only (a DB outage must never restart pods); readiness uses the approved Degraded semantics. 12/12 resources valid (kubeconform strict, K8s 1.30). Not deployed to a cluster (out of scope, documented) |
 
 ## High-impact sign-off register
 

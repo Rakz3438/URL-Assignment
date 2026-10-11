@@ -34,7 +34,7 @@ at the end of the greenfield scenario.
 | A-8 | URL safety policy | ✅ | 36 test cases in `UrlPolicyTests` + 3 at HTTP level. Residual risk: no DNS resolution (documented) |
 | A-9 | 404 unknown/deleted, 410 expired | ✅ | Tests for all three |
 | A-10 | Reliability features | ✅ | Idempotent create, graceful degradation, retries, circuit breaker, rate limiting, health probes: all built and chaos-tested (Scenario 3) |
-| A-11 | Horizontal scale | ⏳ URL-19/21 | Stateless in Postgres mode; SQLite mode is single-instance by nature |
+| A-11 | Horizontal scale | ✅ | 2 replicas behind nginx share load (compose); HPA 3–20 in K8s manifests; one-shot migrations remove the replica race |
 
 ## Non-functional requirements
 
@@ -42,10 +42,10 @@ at the end of the greenfield scenario.
 |---|---|---|---|
 | NFR-1 | Redirect p95 < 20 ms on cache hit | ✅ | **p95 3.10 ms** at 24.8k req/s (baseline 9.64 ms). Local-only measurement |
 | NFR-2 | Redirect survives Redis/Kafka outage | ✅ | Chaos tests: Kafka down, 0 errors and 0 clicks lost (after fix); Redis down, 0 errors. Redis log flood → URL-16 |
-| NFR-3 | Stateless, any instance serves any request | 🟡 | True with PostgreSQL. `MigrateOnStartup` with several replicas could race: run migrations as a pre-deploy job (URL-21) |
+| NFR-3 | Stateless, any instance serves any request | ✅ | Verified with 2 replicas behind nginx. Migrations run once (compose `migrate`, K8s Job) |
 | NFR-4 | Validation, API key, rate limiting, no secrets in source, dependency scan | ✅ | Rate limiting ✅ (S1); blocklist + security headers added (S2/S4). Dependency scan ✅ (caught and fixed CVE-2025-6965). Dev-only key lives in `appsettings.Development.json`; production startup refuses to run without configured keys and salt |
 | NFR-5 | JSON logs, correlation ID, OTel, health endpoints | ✅ | All built (R2/R3). EF false-error issue fixed and regression-tested (0 Error logs for expected 409s) |
-| NFR-6 | Zero-setup mode **and** full-infra mode | 🟡 | Zero-setup ✅. **PostgreSQL mode ✅ verified 2026-10-11** against PostgreSQL 16.15 in Docker, switched by environment variables only: migration applied; unique indexes present; all endpoints, 20-way alias race (1×201, 19×409), idempotent replay, expiry stored as UTC, stats and delete behave as on SQLite. Full compose stack (Redis, Kafka, worker) ⏳ URL-19 |
+| NFR-6 | Zero-setup mode **and** full-infra mode | 🟡 | Zero-setup ✅. **PostgreSQL mode ✅ verified 2026-10-11** against PostgreSQL 16.15 in Docker, switched by environment variables only: migration applied; unique indexes present; all endpoints, 20-way alias race (1×201, 19×409), idempotent replay, expiry stored as UTC, stats and delete behave as on SQLite. Full compose stack ✅: everything in containers (`--profile app`), verified end-to-end through nginx |
 | NFR-7 | Layers, analyzers, ≥ 80% coverage | ✅ | Architecture tests; warnings as errors; coverage **enforced** in the gate (added in this audit). Domain 92.0%, Application 97.9% |
 
 ## Failure scenarios (§8)
