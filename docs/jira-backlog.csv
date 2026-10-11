@@ -1,0 +1,32 @@
+Issue Type,Issue Key,Summary,Epic Link,Depends On,Story Points,Labels,Description
+Epic,E0,Foundations,,,,foundation,Solution skeleton and AI governance
+Epic,E1,Greenfield core service,,,,greenfield,Scenario 1 - core shortener APIs
+Epic,E2,Brownfield modernization,,,,brownfield,Scenario 2 - event-driven analytics + caching + bug fix
+Epic,E3,Ambiguous: safe and reliable links,,,,ambiguous,Scenario 3 - interpret and implement reliability/safety
+Epic,E4,Delivery,,,,devops,Docker / K8s / CI
+Epic,E5,Documentation and summary,,,,docs,Architecture / scenarios / final summary
+Story,URL-1,Solution skeleton with Clean Architecture layers,E0,,3,foundation,"AC: build passes with TreatWarningsAsErrors; Domain has no project dependencies"
+Story,URL-2,AI governance files and traceability log,E0,,2,ai-governance,"AC: CLAUDE.md, copilot-instructions.md, AI log, PR template exist"
+Story,URL-3,Domain model ShortLink/ShortCode/ICodeGenerator,E1,URL-1,3,greenfield;high-impact,"AC: invariants unit-tested; CSPRNG used"
+Story,URL-4,URL safety policy,E1,URL-3,3,greenfield;security;high-impact,"AC: rejects non-http(s), credentials, private IPs, localhost, self-domain, >2048 chars"
+Story,URL-5,EF Core persistence with SQLite and PostgreSQL,E1,URL-3,5,greenfield;high-impact,"AC: migrations apply on both providers; unique index on code"
+Story,URL-6,Create/Get/Delete/Redirect endpoints + OpenAPI,E1,URL-4;URL-5,5,greenfield,"AC: FR-1..FR-4 and FR-9 covered by integration tests"
+Story,URL-7,API key auth for management endpoints,E1,URL-6,2,greenfield;security,"AC: 401 without key; redirect public"
+Story,URL-8,Idempotency-Key on create,E1,URL-6,3,greenfield;reliability,"AC: same key same body -> same response; different body -> 422"
+Story,URL-9,Initial synchronous click analytics (legacy baseline),E1,URL-6,2,greenfield,"AC: stats endpoint returns counts"
+Story,URL-10,Impact analysis and baseline measurement,E2,URL-9,2,brownfield,"AC: written analysis + baseline latency numbers"
+Story,URL-11,Event-driven analytics via outbox + Kafka + worker,E2,URL-10,8,brownfield;kafka;high-impact,"AC: no sync click writes on redirect; idempotent consumer; stats eventually correct"
+Story,URL-12,Cache-aside redirect lookups,E2,URL-10,3,brownfield;performance,"AC: cache hit avoids DB; delete invalidates; before/after numbers"
+Story,URL-13,Fix concurrent custom-alias race,E2,URL-6,2,brownfield;bug,"AC: parallel creates -> exactly one 201 rest 409"
+Story,URL-14,Interpretation record for 'safe and reliable',E3,URL-11,1,ambiguous,"AC: signed-off decision record"
+Story,URL-15,Rate limiting,E3,URL-14,2,ambiguous;security,"AC: 429 + Retry-After beyond limit"
+Story,URL-16,Resilience policies and graceful degradation,E3,URL-14,5,ambiguous;reliability,"AC: redirect works with cache or Kafka down"
+Story,URL-17,Expiry enforcement and cache TTL bound,E3,URL-14,2,ambiguous,"AC: 410 after expiry; TTL <= expiry"
+Story,URL-18,Observability (Serilog JSON / OTel / health),E3,URL-14,3,ambiguous;observability,"AC: JSON logs with correlation ID; readiness reflects DB"
+Story,URL-19,Dockerfiles and docker-compose,E4,URL-11,3,devops,"AC: docker compose up works end-to-end"
+Story,URL-20,GitHub Actions CI quality gates,E4,URL-6,3,devops;quality,"AC: build/format/analyzers/tests/coverage/vuln scan"
+Story,URL-21,Kubernetes manifests,E4,URL-19,2,devops,"AC: kubectl dry-run validates"
+Story,URL-22,Load test and results,E4,URL-12,2,performance,"AC: before/after report"
+Story,URL-23,Architecture overview and ADRs,E5,URL-11,2,docs,"AC: diagram + decisions"
+Story,URL-24,Scenario write-ups x3,E5,URL-13;URL-18,3,docs,"AC: decomposition -> execution -> validation per scenario"
+Story,URL-25,Final engineering summary,E5,,2,docs,"AC: plan/artifacts/risks/assumptions/limitations/AI traceability"
