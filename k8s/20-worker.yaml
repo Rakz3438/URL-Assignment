@@ -1,0 +1,37 @@
+# Analytics Worker. Replicas must not exceed the topic's partition count (6): extra consumers would sit idle.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: urlshortener-worker
+  namespace: urlshortener
+  labels: { app.kubernetes.io/name: urlshortener-worker }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: urlshortener-worker }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: urlshortener-worker }
+    spec:
+      terminationGracePeriodSeconds: 30   # consumer.Close() leaves the group cleanly so partitions rebalance at once
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: worker
+          image: ghcr.io/rakz3438/urlshortener-worker:1.0.0
+          envFrom:
+            - configMapRef: { name: urlshortener-config }
+            - secretRef: { name: urlshortener-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { memory: 384Mi }
+          # No HTTP endpoint in the worker (known limitation). Health is observed via consumer-lag alerts on
+          # the "analytics-worker" group; a crash restarts the pod and Kafka redelivers uncommitted batches.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]

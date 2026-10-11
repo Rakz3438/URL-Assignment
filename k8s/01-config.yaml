@@ -1,0 +1,20 @@
+# Non-secret configuration (12-factor: same image, behavior set by environment).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: urlshortener-config
+  namespace: urlshortener
+data:
+  ASPNETCORE_ENVIRONMENT: Production
+  Database__Provider: Postgres
+  Database__MigrateOnStartup: "false"            # migrations run once, in the Job below
+  Analytics__Mode: Kafka
+  Kafka__BootstrapServers: kafka.messaging.svc.cluster.local:9092
+  Kafka__Topic: link-clicks
+  Shortener__PublicBaseUrl: https://sho.rt
+  Network__TrustedNetworks__0: 10.0.0.0/8        # pod network of the ingress controller; adjust per cluster
+  RateLimiting__CreatePerMinute: "30"
+  RateLimiting__RedirectPerMinute: "300"
+  Telemetry__TraceSampleRatio: "0.1"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc.cluster.local:4317
+  Logging__Format: json

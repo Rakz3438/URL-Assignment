@@ -1,0 +1,36 @@
+# Runs EF Core migrations once per release, before the new API pods roll out (e.g. as a Helm pre-upgrade hook
+# or an Argo CD sync wave). Replicas never migrate on startup, so they cannot race each other.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: urlshortener-migrate
+  namespace: urlshortener
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: urlshortener-migrate }
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: ghcr.io/rakz3438/urlshortener-api:1.0.0
+          env:
+            - { name: Database__MigrateOnly, value: "true" }
+          envFrom:
+            - configMapRef: { name: urlshortener-config }
+            - secretRef: { name: urlshortener-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]

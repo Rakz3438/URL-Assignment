@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: urlshortener-api
+  namespace: urlshortener
+  labels: { app.kubernetes.io/name: urlshortener-api }
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels: { app.kubernetes.io/name: urlshortener-api }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }   # never drop below desired capacity during a rollout
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: urlshortener-api }
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:   # spread replicas across nodes: one node failure != outage
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app.kubernetes.io/name: urlshortener-api }
+      containers:
+        - name: api
+          image: ghcr.io/rakz3438/urlshortener-api:1.0.0
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom:
+            - configMapRef: { name: urlshortener-config }
+            - secretRef: { name: urlshortener-secrets }
+          env:
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits: { memory: 512Mi }   # no CPU limit: avoids throttling latency spikes; HPA scales on requests
+          # Startup: give the process time to boot. Liveness: process only (a DB outage must never restart pods).
+          # Readiness: dependency report; Degraded (DB down) still counts as ready (approved amendment to §8).
+          startupProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          lifecycle:
+            preStop:   # let the load balancer stop routing before shutdown; the click buffer then flushes
+              sleep: { seconds: 5 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: urlshortener-api
+  namespace: urlshortener
+spec:
+  selector: { app.kubernetes.io/name: urlshortener-api }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: urlshortener-api
+  namespace: urlshortener
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: urlshortener-api }
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300   # avoid flapping after a traffic spike
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: urlshortener-api
+  namespace: urlshortener
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: urlshortener-api }
