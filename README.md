@@ -1,0 +1,66 @@
+# URL Shortener — AI-Assisted Engineering Assignment
+
+A production-shaped URL shortener in **.NET 8 / ASP.NET Core**, built with Claude Code and GitHub Copilot
+under engineer-led controls (spec-first, traceability log, quality gates, human sign-off).
+
+> Status: **greenfield core complete** (create / get / delete / redirect / stats, API-key auth,
+> idempotency, URL safety policy). Brownfield (Kafka event-driven analytics, Redis caching) and
+> ambiguous-requirement scenarios are next. See [docs/02-task-breakdown.md](docs/02-task-breakdown.md).
+
+## Quick start (zero setup: SQLite, no Docker)
+
+Prerequisite: [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
+
+```bash
+dotnet run --project src/UrlShortener.Api
+```
+
+Swagger UI opens at http://localhost:5080/swagger. The development API key is `dev-api-key-change-me`.
+
+```bash
+# Create a short link
+curl -s -X POST http://localhost:5080/api/v1/links \
+  -H "X-Api-Key: dev-api-key-change-me" -H "Content-Type: application/json" \
+  -d '{"url":"https://learn.microsoft.com/dotnet","customAlias":"dotnet-docs"}'
+
+# Follow it (302)
+curl -i http://localhost:5080/dotnet-docs
+
+# Analytics
+curl -s http://localhost:5080/api/v1/links/dotnet-docs/stats -H "X-Api-Key: dev-api-key-change-me"
+```
+
+## API
+
+| Method | Path | Auth | Purpose | Responses |
+|---|---|---|---|---|
+| POST | `/api/v1/links` | API key | Create link (`url`, optional `customAlias` (stored lowercase), `expiresAt`; optional `Idempotency-Key` header) | 201 (replays add `Idempotent-Replayed: true`), 400, 401, 409, 422 |
+| GET | `/api/v1/links/{code}` | API key | Link metadata | 200, 404 |
+| DELETE | `/api/v1/links/{code}` | API key | Deactivate (soft delete) | 204, 404 |
+| GET | `/api/v1/links/{code}/stats` | API key | Clicks: total, unique visitors, daily series, top referrers, top browsers | 200, 404 |
+| GET | `/{code}` | public | Redirect | 302, 404, 410 (expired) |
+
+Errors use RFC 7807 `application/problem+json` with a stable `errorCode`.
+
+## Quality gate
+
+```bash
+./scripts/quality-gate.sh
+```
+
+Restore with NuGet audit → format check → build with analyzers (warnings as errors) → 118 unit + integration
+tests with coverage → vulnerable-dependency scan.
+
+## Repository map
+
+| Path | What |
+|---|---|
+| `docs/01-requirements.md` | Requirement normalization: ambiguities → signed-off decisions |
+| `docs/02-task-breakdown.md`, `docs/jira-backlog.csv` | Epics/stories with dependencies (Jira-importable) |
+| `docs/ai-log/AI-TRACEABILITY.md` | Every AI step: accepted / edited / rejected, with rationale |
+| `CLAUDE.md`, `.github/copilot-instructions.md` | Custom instructions that constrain the AI assistants |
+| `src/UrlShortener.Domain` | Entities and invariants (no dependencies) |
+| `src/UrlShortener.Application` | Use cases, URL safety policy, ports |
+| `src/UrlShortener.Infrastructure` | EF Core (SQLite/PostgreSQL), code generator |
+| `src/UrlShortener.Api` | Minimal API endpoints, auth, OpenAPI |
+| `tests/` | xUnit unit tests (incl. architecture rules) and `WebApplicationFactory` integration tests |
