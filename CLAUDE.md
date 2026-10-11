@@ -41,4 +41,5 @@ Specs live in `docs/01-requirements.md` (decisions A-1…A-11) and `docs/02-task
 - Commit messages reference the story ID, e.g. `URL-6: add redirect endpoint`.
 
 ## Quality gate (run before every commit)
-`dotnet format --verify-no-changes && dotnet build -warnaserror && dotnet test`
+`./scripts/quality-gate.sh`: restore with NuGet audit → format check → build (warnings as errors) →
+tests + coverage → vulnerable-dependency scan. CI runs the same script.
