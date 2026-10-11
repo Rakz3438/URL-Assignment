@@ -102,6 +102,14 @@ app.MapHealthEndpoints();
 app.MapLinkEndpoints();
 app.MapRedirectEndpoints();
 
+// Migrations: with several replicas, run them once as a separate step (Database__MigrateOnly=true: compose "migrate"
+// service, Kubernetes Job) and set Database__MigrateOnStartup=false on the replicas, so they never race each other.
+if (app.Configuration.GetValue("Database:MigrateOnly", false))
+{
+    await app.Services.MigrateDatabaseAsync();
+    return;
+}
+
 if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
 {
     await app.Services.MigrateDatabaseAsync();

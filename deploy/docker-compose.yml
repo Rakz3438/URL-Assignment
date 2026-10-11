@@ -3,6 +3,14 @@
 # Credentials here are local-development values only; real deployments inject secrets (see docs).
 name: urlshortener
 
+# Shared settings for the application containers (profile "app"). Local-development secrets only:
+# real deployments inject them from a secret store (see k8s/ and docs).
+x-app-env: &app-env
+  Database__Provider: Postgres
+  ConnectionStrings__Links: "Host=postgres;Port=5432;Database=urlshortener;Username=app;Password=local-dev-only;Timeout=3;Command Timeout=5"
+  Shortener__VisitorHashSalt: local-compose-salt-not-a-real-secret
+  Auth__ApiKeys__0: compose-demo-api-key-0123456789
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -73,5 +81,68 @@ services:
       DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true" # local development only
     ports: ["18888:18888", "4317:18889"]
 
+  # ---------------------------------------------------------------------------------------------------------
+  # Application containers (compose profile "app"): everything runs in Docker, nothing on the host.
+  #   docker compose -f deploy/docker-compose.yml --profile app up -d --build --wait
+  #   curl http://localhost:8080/health/ready
+  # ---------------------------------------------------------------------------------------------------------
+  migrate:
+    profiles: ["app"]
+    build: { context: .., dockerfile: src/UrlShortener.Api/Dockerfile }
+    image: urlshortener-api:local
+    environment:
+      <<: *app-env
+      Database__MigrateOnly: "true"
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    profiles: ["app"]
+    image: urlshortener-api:local
+    deploy: { replicas: 2 }   # stateless: any replica serves any request (NFR-3)
+    environment:
+      <<: *app-env
+      ASPNETCORE_ENVIRONMENT: Production
+      Database__MigrateOnStartup: "false"
+      ConnectionStrings__Redis: "redis:6379,abortConnect=false,connectTimeout=1000,syncTimeout=250"
+      Analytics__Mode: Kafka
+      Kafka__BootstrapServers: kafka:29092
+      Shortener__PublicBaseUrl: http://localhost:8080
+      Network__TrustedNetworks__0: 172.28.0.0/16   # the compose network: only nginx can set X-Forwarded-For
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8080' || exit 1"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+
+  worker:
+    profiles: ["app"]
+    build: { context: .., dockerfile: src/UrlShortener.AnalyticsWorker/Dockerfile }
+    image: urlshortener-worker:local
+    environment:
+      <<: *app-env
+      Kafka__BootstrapServers: kafka:29092
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      kafka-init: { condition: service_completed_successfully }
+
+  proxy:
+    profiles: ["app"]
+    image: nginx:1.27-alpine
+    volumes: ["./nginx/nginx.conf:/etc/nginx/nginx.conf:ro"]
+    ports: ["8080:8080"]
+    depends_on:
+      api: { condition: service_healthy }
+
 volumes:
   pgdata:
+
+networks:
+  default:
+    ipam:
+      config: [{ subnet: 172.28.0.0/16 }]
