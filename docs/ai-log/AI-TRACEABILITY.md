@@ -40,6 +40,12 @@ in `CLAUDE.md`.
 | 27 | 2026-10-11 | URL-11 | Data migration for legacy clicks | Hand-written backfill SQL in the PostgreSQL migration | **Accepted** | Verified on real legacy data: 295,942 → 295,942. SQLite backfill intentionally omitted (dev-only), documented |
 | 28 | 2026-10-11 | URL-13 | Genuine brownfield defect | Analytics failure → 500 on redirect (failing-first test) | **Accepted** | Fixed by decoupling; regression tests for failing, hanging and cache-down cases |
 | 29 | 2026-10-11 | URL-14 | Interpret "make the links safe and reliable" | 12 interpretations, each tied to a concrete failure (2 already measured), cost and risk; recommended 6 in / 4 out | **Accepted** | Engineer asked which option best fits the assignment's evaluation criteria; mapping to criteria + JD given; recommendations approved. Rejected-by-design items documented with "what would change the decision" |
+| 30 | 2026-10-11 | URL-15 | Rate limiting, blocklist, security headers | Built-in ASP.NET rate limiter (no new package), `DomainBlocklist`, headers middleware | **Edited** | AI's own hand-typed punycode test value was wrong (`-xhb` vs real `-thb`); replaced with a Unicode input so the system computes it |
+| 31 | 2026-10-11 | URL-18 | Choose OpenTelemetry versions | Proposed 1.9.0 | **Rejected** | OTLP exporter 1.9.0–1.15.0 all carry a published vulnerability (checked NuGet metadata per version); chose 1.15.3, first clean release still on the .NET 8 dependency floor |
+| 32 | 2026-10-11 | URL-18 | Trusted proxies / real client IP | Cleared ASP.NET's default trusted proxies "to be strict" | **Rejected** (own implementation) | Test showed forged X-Forwarded-For was believed: empty trusted lists mean "trust everyone". Forwarding now disabled unless proxies are configured. Security defect caught by test, not by review |
+| 33 | 2026-10-11 | URL-16 | Circuit breaker for Redis | Polly breaker, 10 s sampling window | **Rejected** (own tuning) | Chaos test: breaker took 9 s to open, outcome worse than no breaker (6.1k req/s, p99 205 ms). Root-caused from the log timeline; 2 s window + log throttle → 3 log lines per outage, p99 11.5 ms |
+| 34 | 2026-10-11 | URL-18 | Readiness semantics on DB outage | AI flagged §8 ("fail readiness") as a cascading-failure risk with a shared DB | **Accepted** | Engineer approved Degraded and amended §8. Config switch retained; both behaviors tested |
+| 35 | 2026-10-11 | URL-18 | Observability overhead | Measured −13% (instrumentation) / −24% (100% trace export) | **Accepted** | Added trace sampling (10% default outside Development) instead of claiming observability is free |
 
 ## High-impact sign-off register
 
@@ -56,4 +62,6 @@ in `CLAUDE.md`.
 | URL-12 cache design | Cache-aside, TTL ≤ min(5 min, expiry), write-through on create, invalidate on delete, fall back to DB on cache errors, no negative caching | Rakz3438 | 2026-10-11 |
 | Brownfield URL-10…13 (incl. 🔒 URL-11 implementation) | Approved for commit after review of results, defects found, trade-offs and AI log entries 22–28 | Rakz3438 | 2026-10-11 |
 | URL-14 scope | S1 rate limiting, S2 domain blocklist, S4 security headers, R1 circuit breaker + DB-down, R2 health probes, R3 observability; out: S2+, S3, R5, R6 | Rakz3438 | 2026-10-11 |
+| §8 amendment (readiness) | DB outage → readiness Degraded (200), not Unhealthy | Rakz3438 | 2026-10-11 |
+| Ambiguous scenario URL-15, URL-16, URL-18 | Approved for commit after review of results, defects found (incl. spoofable client IP) and AI log entries 30–35 | Rakz3438 | 2026-10-11 |
 | FR-5 / FR-8 changes | Aliases stored lowercase; idempotent replay returns identical 201 + `Idempotent-Replayed` header | Rakz3438 | 2026-10-11 |

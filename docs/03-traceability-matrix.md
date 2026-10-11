@@ -16,7 +16,7 @@ at the end of the greenfield scenario.
 | FR-4 | Soft delete | `ShortLink.Delete`, `LinkService.DeleteAsync` | `LinkApiTests.Delete_ExistingLink_Returns204AndLinkStopsResolving` | ✅ |
 | FR-5 | Custom alias: unique, charset, reserved words | `ShortCode.IsValidAlias`, unique index | `ShortCodeTests`, `Create_DuplicateAlias_Returns409`, `Create_MixedCaseAlias_IsStoredLowercaseAndFollowable` | ✅ Note 1 resolved |
 | FR-6 | Expiry stops redirects | `ShortLink.GetStatus` | `Redirect_AfterExpiry_Returns410`, `GetStatus_AtExactExpiry_IsExpired` | ✅ |
-| FR-7 | Stats: total, per day, referrers, UA families | `StatsService`, `DbLinkStatsReader` | `Stats_AfterClicks_ReturnsTotalsReferrersAgentsAndDailySeries` | 🟡 Note 2 → ⏳ URL-18 |
+| FR-7 | Stats: total, per day, referrers, UA families | `StatsService`, `DbLinkStatsReader` | `Stats_AfterClicks_ReturnsTotalsReferrersAgentsAndDailySeries`, `UniqueVisitors_BehindProxy_*` | ✅ Note 2 resolved in URL-18 |
 | FR-8 | Idempotency-Key | Unique `IdempotencyKey` column, `LinkService.TryReplayAsync` | `Create_RetryWithIdempotencyKey_ReplaysIdentical201WithReplayHeader`, `CreateAsync_ConcurrentRequestsSameKey_*` | ✅ Note 3 resolved |
 | FR-9 | OpenAPI | Swashbuckle, `/swagger/v1/swagger.json` | `OpenApi_Document_IsPublished` | ✅ |
 
@@ -33,7 +33,7 @@ at the end of the greenfield scenario.
 | A-7 | Eventually consistent analytics | ✅ | Kafka pipeline; worker caught up within 10–18 s after 25k req/s bursts; integration tests wait with a deadline |
 | A-8 | URL safety policy | ✅ | 36 test cases in `UrlPolicyTests` + 3 at HTTP level. Residual risk: no DNS resolution (documented) |
 | A-9 | 404 unknown/deleted, 410 expired | ✅ | Tests for all three |
-| A-10 | Reliability features | 🟡 | Idempotent create ✅. Degradation, retries, circuit breaker, rate limiting, health probes ⏳ URL-15/16/18 |
+| A-10 | Reliability features | ✅ | Idempotent create, graceful degradation, retries, circuit breaker, rate limiting, health probes: all built and chaos-tested (Scenario 3) |
 | A-11 | Horizontal scale | ⏳ URL-19/21 | Stateless in Postgres mode; SQLite mode is single-instance by nature |
 
 ## Non-functional requirements
@@ -43,8 +43,8 @@ at the end of the greenfield scenario.
 | NFR-1 | Redirect p95 < 20 ms on cache hit | ✅ | **p95 3.10 ms** at 24.8k req/s (baseline 9.64 ms). Local-only measurement |
 | NFR-2 | Redirect survives Redis/Kafka outage | ✅ | Chaos tests: Kafka down, 0 errors and 0 clicks lost (after fix); Redis down, 0 errors. Redis log flood → URL-16 |
 | NFR-3 | Stateless, any instance serves any request | 🟡 | True with PostgreSQL. `MigrateOnStartup` with several replicas could race: run migrations as a pre-deploy job (URL-21) |
-| NFR-4 | Validation, API key, rate limiting, no secrets in source, dependency scan | 🟡 | Rate limiting ⏳ URL-15. Dependency scan ✅ (caught and fixed CVE-2025-6965). Dev-only key lives in `appsettings.Development.json`; production startup refuses to run without configured keys and salt |
-| NFR-5 | JSON logs, correlation ID, OTel, health endpoints | ⏳ URL-18 | Not started. Known issue, now measured: 20 handled 409 conflicts produced 40 Error-level EF Core log entries and 0 real errors (false alerts) |
+| NFR-4 | Validation, API key, rate limiting, no secrets in source, dependency scan | ✅ | Rate limiting ✅ (S1); blocklist + security headers added (S2/S4). Dependency scan ✅ (caught and fixed CVE-2025-6965). Dev-only key lives in `appsettings.Development.json`; production startup refuses to run without configured keys and salt |
+| NFR-5 | JSON logs, correlation ID, OTel, health endpoints | ✅ | All built (R2/R3). EF false-error issue fixed and regression-tested (0 Error logs for expected 409s) |
 | NFR-6 | Zero-setup mode **and** full-infra mode | 🟡 | Zero-setup ✅. **PostgreSQL mode ✅ verified 2026-10-11** against PostgreSQL 16.15 in Docker, switched by environment variables only: migration applied; unique indexes present; all endpoints, 20-way alias race (1×201, 19×409), idempotent replay, expiry stored as UTC, stats and delete behave as on SQLite. Full compose stack (Redis, Kafka, worker) ⏳ URL-19 |
 | NFR-7 | Layers, analyzers, ≥ 80% coverage | ✅ | Architecture tests; warnings as errors; coverage **enforced** in the gate (added in this audit). Domain 92.0%, Application 97.9% |
 
@@ -55,8 +55,8 @@ at the end of the greenfield scenario.
 | Code collision → retry ×5, then 500 | ✅ `CreateAsync_GeneratedCodeCollides_*`, `CreateAsync_AllAttemptsCollide_*` |
 | Concurrent identical alias → one 201, rest 409 | ✅ 20 parallel requests over HTTP + real SQLite |
 | Redis down / Kafka down | ✅ Chaos tests 2–3 + integration tests | 
-| DB down | ⏳ URL-16 |
-| Abuse → 429 | ⏳ URL-15 |
+| DB down | ✅ Chaos test + `ResilienceTests`: cached 302, uncached 503 + Retry-After; 0 clicks lost |
+| Abuse → 429 | ✅ `SafetyTests` |
 | Duplicate event delivery | ✅ `EfClickIngestorTests` + chaos test 4 (worker SIGKILL): raw = aggregates |
 
 ## Notes (deviations, with the engineer's decisions)

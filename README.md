@@ -3,9 +3,9 @@
 A production-shaped URL shortener in **.NET 8 / ASP.NET Core**, built with Claude Code and GitHub Copilot
 under engineer-led controls (spec-first, traceability log, quality gates, human sign-off).
 
-> Status: **greenfield ✅, brownfield ✅** (Kafka event-driven analytics, Redis cache, Analytics Worker:
-> 3.3× throughput, p95 9.6 → 3.1 ms, redirects unaffected by analytics/Kafka/Redis outages). Ambiguous scenario next.
-> See [docs/scenarios/02-brownfield.md](docs/scenarios/02-brownfield.md).
+> Status: **greenfield ✅, brownfield ✅, ambiguous ✅** — Kafka event-driven analytics, Redis cache, rate limiting,
+> domain blocklist, circuit breaker, health probes, JSON logs + OpenTelemetry. Chaos-tested: redirects keep working
+> through Redis, Kafka and PostgreSQL outages. See [docs/scenarios/](docs/scenarios/).
 
 ## Quick start (zero setup: SQLite, no Docker)
 
@@ -38,7 +38,13 @@ Requires Docker. Same code, switched by environment variables only:
 ./scripts/run-full-local.sh
 ```
 
-Load test (k6 runs in Docker, nothing to install):
+Optional telemetry viewer (logs, metrics, traces): `docker compose -f deploy/docker-compose.yml --profile observability up -d`,
+then open http://localhost:18888 (the run script detects it automatically).
+
+Health: `GET /health/live`, `GET /health/ready`.
+
+Load test (k6 runs in Docker, nothing to install; start the stack with `RATE_LIMITS=off ./scripts/run-full-local.sh`
+first, since a load generator on one machine looks like a single abusive client):
 
 ```bash
 docker run --rm -i -e BASE_URL=http://host.docker.internal:5080 -e CODE=<code> grafana/k6:0.54.0 run - < loadtest/redirect.js

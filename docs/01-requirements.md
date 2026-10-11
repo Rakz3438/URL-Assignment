@@ -102,7 +102,7 @@ Rows marked ⚠️ are **high-impact** and need explicit engineer sign-off.
 |---|---|
 | Redis down | Cache bypassed (circuit breaker), redirect served from DB, latency rises, no errors |
 | Kafka down | Redirect unaffected. Clicks wait in the producer's buffer and are delivered when Kafka returns within the retry window (default 5 min); beyond that the oldest are dropped and counted in a metric *(amended 2026-10-11: the DB outbox was rejected for the redirect path, see scenarios/02-brownfield.md)* |
-| DB down | Cached links still redirect; uncached → 503 with `Retry-After`; readiness probe fails so the load balancer drains the instance |
+| DB down | Cached links still redirect; uncached → 503 with `Retry-After`; readiness reports **Degraded (200)** so instances stay in rotation *(amended 2026-10-11, engineer-approved: the DB is shared, so failing readiness on every replica at once would remove all of them and turn partial service into a total outage; `Health__FailReadinessOnDatabaseOutage=true` restores the original behavior)* |
 | Code collision | Unique index violation → retry with new code (max 5), then 500 + alert-worthy log |
 | Concurrent identical custom alias | Exactly one succeeds (201), the other gets 409 Conflict. The DB constraint decides, not an application-level check |
 | Abuse / scraping | Per-client rate limits → 429 with `Retry-After` |
