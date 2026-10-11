@@ -25,6 +25,7 @@ builder.Services.AddOptions<ApiKeyOptions>()
 // ---- Layers ----
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddClickPipeline(builder.Configuration);
 
 // ---- HTTP concerns ----
 builder.Services.AddProblemDetails();

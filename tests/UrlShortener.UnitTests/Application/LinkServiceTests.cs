@@ -14,10 +14,11 @@ public class LinkServiceTests
     private const string Url = "https://example.com/page";
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 11, 12, 0, 0, TimeSpan.Zero));
     private readonly InMemoryLinkRepository _repo = new();
+    private readonly InMemoryLinkCache _cache = new();
     private readonly ShortenerOptions _options = new() { PublicBaseUrl = "https://sho.rt", MaxCodeGenerationAttempts = 3 };
 
     private LinkService CreateService(params string[] codes) =>
-        new(_repo, new ScriptedCodeGenerator(codes), new UrlPolicy(Options.Create(_options)), _clock,
+        new(_repo, _cache, new ScriptedCodeGenerator(codes), new UrlPolicy(Options.Create(_options)), _clock,
             Options.Create(_options), NullLogger<LinkService>.Instance);
 
     [Fact]
@@ -175,6 +176,25 @@ public class LinkServiceTests
 
         (await service.GetAsync("aaaaaaa", default)).Error!.Type.Should().Be(ErrorType.NotFound);
         (await service.DeleteAsync("aaaaaaa", default)).Error!.Type.Should().Be(ErrorType.NotFound);
+    }
+
+    [Fact]
+    public async Task CreateAsync_NewLink_WritesThroughToCache()
+    {
+        await CreateService("aaaaaaa").CreateAsync(new CreateLinkCommand(Url, null, null, null), default);
+
+        _cache.Entries.Should().ContainKey("aaaaaaa").WhoseValue.TargetUrl.Should().Be(Url);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_CachedLink_InvalidatesCache()
+    {
+        var service = CreateService("aaaaaaa");
+        await service.CreateAsync(new CreateLinkCommand(Url, null, null, null), default);
+
+        await service.DeleteAsync("aaaaaaa", default);
+
+        _cache.Entries.Should().NotContainKey("aaaaaaa");
     }
 
     [Fact]

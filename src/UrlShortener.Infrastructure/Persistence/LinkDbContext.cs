@@ -13,6 +13,7 @@ public abstract class LinkDbContext : DbContext
 
     public DbSet<ShortLink> ShortLinks => Set<ShortLink>();
     public DbSet<ClickEvent> ClickEvents => Set<ClickEvent>();
+    public DbSet<LinkDailyStat> DailyStats => Set<LinkDailyStat>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +42,14 @@ public abstract class LinkDbContext : DbContext
             b.Property(x => x.UserAgentFamily).HasMaxLength(32).IsRequired();
             b.Property(x => x.VisitorHash).HasMaxLength(32);
             b.HasIndex(x => new { x.Code, x.OccurredAt });
+        });
+
+        modelBuilder.Entity<LinkDailyStat>(b =>
+        {
+            b.ToTable("link_daily_stats");
+            // Composite key doubles as the upsert conflict target used by click ingestion.
+            b.HasKey(x => new { x.Code, x.Day });
+            b.Property(x => x.Code).HasMaxLength(ShortCode.AliasMaxLength);
         });
     }
 }

@@ -12,6 +12,7 @@ internal sealed class InMemoryLinkRepository : IShortLinkRepository
     private readonly Dictionary<string, ShortLink> _byKey = new(StringComparer.Ordinal);
 
     public int AddAttempts { get; private set; }
+    public int Reads { get; private set; }
 
     public IReadOnlyCollection<ShortLink> All
     {
@@ -28,6 +29,7 @@ internal sealed class InMemoryLinkRepository : IShortLinkRepository
     {
         lock (_gate)
         {
+            Reads++;
             return Task.FromResult(_byCode.GetValueOrDefault(code));
         }
     }
@@ -78,4 +80,56 @@ internal sealed class ScriptedCodeGenerator : IShortCodeGenerator
     public ScriptedCodeGenerator(params string[] codes) => _codes = new ConcurrentQueue<string>(codes);
 
     public string Generate() => _codes.TryDequeue(out var code) ? code : throw new InvalidOperationException("Script exhausted.");
+}
+
+/// <summary>Dictionary-backed <see cref="ILinkCache"/> that records calls.</summary>
+internal sealed class InMemoryLinkCache : ILinkCache
+{
+    private readonly ConcurrentDictionary<string, LinkSnapshot> _entries = new(StringComparer.Ordinal);
+
+    public int Gets { get; private set; }
+    public IReadOnlyDictionary<string, LinkSnapshot> Entries => _entries;
+
+    public Task<LinkSnapshot?> GetAsync(string code, CancellationToken cancellationToken)
+    {
+        Gets++;
+        return Task.FromResult(_entries.GetValueOrDefault(code));
+    }
+
+    public Task SetAsync(LinkSnapshot link, CancellationToken cancellationToken)
+    {
+        _entries[link.Code] = link;
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveAsync(string code, CancellationToken cancellationToken)
+    {
+        _entries.TryRemove(code, out _);
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class CollectingClickSink : IClickSink
+{
+    public ConcurrentQueue<UrlShortener.Domain.Analytics.ClickEvent> Clicks { get; } = new();
+
+    public bool TryEnqueue(UrlShortener.Domain.Analytics.ClickEvent click)
+    {
+        Clicks.Enqueue(click);
+        return true;
+    }
+}
+
+internal sealed class TestMeterFactory : System.Diagnostics.Metrics.IMeterFactory
+{
+    private readonly List<System.Diagnostics.Metrics.Meter> _meters = [];
+
+    public System.Diagnostics.Metrics.Meter Create(System.Diagnostics.Metrics.MeterOptions options)
+    {
+        var meter = new System.Diagnostics.Metrics.Meter(options);
+        _meters.Add(meter);
+        return meter;
+    }
+
+    public void Dispose() => _meters.ForEach(m => m.Dispose());
 }

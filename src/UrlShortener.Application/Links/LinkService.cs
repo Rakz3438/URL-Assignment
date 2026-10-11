@@ -20,16 +20,18 @@ public sealed partial class LinkService
     public const int MaxIdempotencyKeyLength = 128;
 
     private readonly IShortLinkRepository _repository;
+    private readonly ILinkCache _cache;
     private readonly IShortCodeGenerator _codeGenerator;
     private readonly UrlPolicy _urlPolicy;
     private readonly TimeProvider _clock;
     private readonly ShortenerOptions _options;
     private readonly ILogger<LinkService> _logger;
 
-    public LinkService(IShortLinkRepository repository, IShortCodeGenerator codeGenerator, UrlPolicy urlPolicy,
+    public LinkService(IShortLinkRepository repository, ILinkCache cache, IShortCodeGenerator codeGenerator, UrlPolicy urlPolicy,
         TimeProvider clock, IOptions<ShortenerOptions> options, ILogger<LinkService> logger)
     {
         _repository = repository;
+        _cache = cache;
         _codeGenerator = codeGenerator;
         _urlPolicy = urlPolicy;
         _clock = clock;
@@ -95,6 +97,9 @@ public sealed partial class LinkService
             if (await _repository.TryAddAsync(link, cancellationToken))
             {
                 LogCreated(_logger, link.Code, link.IsCustomAlias);
+
+                // Write-through: the first redirect of a new link is already a cache hit.
+                await _cache.SetAsync(LinkSnapshot.From(link), cancellationToken);
                 return new CreateLinkResult(link, Replayed: false);
             }
 
@@ -139,6 +144,10 @@ public sealed partial class LinkService
 
         link.Delete(_clock.GetUtcNow());
         await _repository.UpdateAsync(link, cancellationToken);
+
+        // Invalidate after the DB commit. If the cache is unreachable the entry can survive until its TTL
+        // (≤ 5 min): accepted risk, documented in the brownfield scenario.
+        await _cache.RemoveAsync(code, cancellationToken);
         LogDeleted(_logger, code);
         return true;
     }

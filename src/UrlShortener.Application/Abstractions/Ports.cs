@@ -23,10 +23,40 @@ public interface IShortLinkRepository
     Task UpdateAsync(ShortLink link, CancellationToken cancellationToken);
 }
 
-/// <summary>Records a click. In the initial (greenfield) design this writes synchronously to the database.</summary>
-public interface IClickRecorder
+/// <summary>Hands a click off for asynchronous processing (URL-11). Called on the redirect hot path, so
+/// implementations must be non-blocking and must never throw: analytics is not allowed to affect redirects.</summary>
+public interface IClickSink
 {
-    Task RecordAsync(ClickEvent click, CancellationToken cancellationToken);
+    /// <returns><c>false</c> if the click could not be accepted (it is counted as dropped, never retried).</returns>
+    bool TryEnqueue(ClickEvent click);
+}
+
+/// <summary>Persists a batch of clicks idempotently: a click whose ID was already stored is ignored, and
+/// daily aggregates are incremented only for newly stored clicks, in the same transaction.
+/// Safe under at-least-once delivery.</summary>
+public interface IClickIngestor
+{
+    /// <returns>Number of clicks newly stored (duplicates excluded).</returns>
+    Task<int> IngestAsync(IReadOnlyCollection<ClickEvent> clicks, CancellationToken cancellationToken);
+}
+
+/// <summary>The minimum needed to serve a redirect, cached so hot links never touch the database (URL-12).</summary>
+public sealed record LinkSnapshot(string Code, string TargetUrl, DateTimeOffset? ExpiresAt)
+{
+    public static LinkSnapshot From(ShortLink link) => new(link.Code, link.TargetUrl, link.ExpiresAt);
+
+    public bool IsExpired(DateTimeOffset now) => ExpiresAt is not null && ExpiresAt <= now;
+}
+
+/// <summary>Cache for redirect lookups. Contract: never throws and never blocks for long. On any cache
+/// failure, reads return <c>null</c> (caller falls back to the database) and writes are skipped.</summary>
+public interface ILinkCache
+{
+    Task<LinkSnapshot?> GetAsync(string code, CancellationToken cancellationToken);
+
+    Task SetAsync(LinkSnapshot link, CancellationToken cancellationToken);
+
+    Task RemoveAsync(string code, CancellationToken cancellationToken);
 }
 
 public interface ILinkStatsReader

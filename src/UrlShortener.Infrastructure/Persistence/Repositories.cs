@@ -46,23 +46,60 @@ internal sealed class ShortLinkRepository : IShortLinkRepository
     }
 }
 
-/// <summary>Initial synchronous click recorder (story URL-9, "legacy" baseline).</summary>
-internal sealed class DbClickRecorder : IClickRecorder
+/// <summary>Idempotent batch ingestion (URL-11), shared by the zero-setup publisher and the Analytics Worker.
+/// One transaction: insert only clicks whose ID is not yet stored, then upsert per-(code, day) aggregates by the
+/// number actually inserted. Redelivered batches therefore change nothing, so at-least-once delivery yields exact counts.</summary>
+internal sealed class EfClickIngestor : IClickIngestor
 {
     private readonly LinkDbContext _db;
 
-    public DbClickRecorder(LinkDbContext db) => _db = db;
+    public EfClickIngestor(LinkDbContext db) => _db = db;
 
-    public async Task RecordAsync(ClickEvent click, CancellationToken cancellationToken)
+    public async Task<int> IngestAsync(IReadOnlyCollection<ClickEvent> clicks, CancellationToken cancellationToken)
     {
-        _db.ClickEvents.Add(click);
-        await _db.SaveChangesAsync(cancellationToken);
-        _db.Entry(click).State = EntityState.Detached;
+        var batch = clicks.DistinctBy(c => c.Id).ToList();
+        if (batch.Count == 0)
+        {
+            return 0;
+        }
+
+        var ids = batch.Select(c => c.Id).ToList();
+        try
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+            var existing = (await _db.ClickEvents.Where(c => ids.Contains(c.Id)).Select(c => c.Id).ToListAsync(cancellationToken)).ToHashSet();
+            var fresh = batch.Where(c => !existing.Contains(c.Id)).ToList();
+            if (fresh.Count > 0)
+            {
+                _db.ClickEvents.AddRange(fresh);
+                await _db.SaveChangesAsync(cancellationToken);
+
+                foreach (var day in fresh.GroupBy(c => (c.Code, Day: DateOnly.FromDateTime(c.OccurredAt.UtcDateTime))))
+                {
+                    // Atomic upsert, valid on both PostgreSQL and SQLite. Parameterized via interpolation (no injection).
+                    await _db.Database.ExecuteSqlInterpolatedAsync(
+                        $"""
+                        INSERT INTO link_daily_stats ("Code", "Day", "Clicks") VALUES ({day.Key.Code}, {day.Key.Day}, {(long)day.Count()})
+                        ON CONFLICT ("Code", "Day") DO UPDATE SET "Clicks" = link_daily_stats."Clicks" + excluded."Clicks"
+                        """, cancellationToken);
+                }
+            }
+
+            await tx.CommitAsync(cancellationToken);
+            return fresh.Count;
+        }
+        finally
+        {
+            // A failed batch is retried by the caller with a fresh view of what is already stored.
+            _db.ChangeTracker.Clear();
+        }
     }
 }
 
-/// <summary>Stats computed from raw click rows. O(clicks in window): acceptable for the baseline,
-/// replaced by pre-aggregated counters in the brownfield scenario.</summary>
+/// <summary>Totals and daily series come from pre-aggregated <c>link_daily_stats</c> (cheap, indexed by key).
+/// Unique visitors and top-N dimensions still read raw clicks in the window: off the redirect path, and bounded by
+/// the window. Pre-aggregating those is the next step if stats load grows.</summary>
 internal sealed class DbLinkStatsReader : ILinkStatsReader
 {
     private const int TopN = 5;
@@ -72,10 +109,15 @@ internal sealed class DbLinkStatsReader : ILinkStatsReader
 
     public async Task<LinkStatsData> GetStatsAsync(string code, DateTimeOffset fromInclusive, CancellationToken cancellationToken)
     {
-        var clicks = _db.ClickEvents.AsNoTracking().Where(x => x.Code == code);
-        var total = await clicks.LongCountAsync(cancellationToken);
+        var aggregates = _db.DailyStats.AsNoTracking().Where(x => x.Code == code);
+        var total = await aggregates.SumAsync(x => x.Clicks, cancellationToken);
 
-        var window = clicks.Where(x => x.OccurredAt >= fromInclusive);
+        var fromDay = DateOnly.FromDateTime(fromInclusive.UtcDateTime);
+        var daily = (await aggregates.Where(x => x.Day >= fromDay).OrderBy(x => x.Day)
+                .Select(x => new { x.Day, x.Clicks }).ToListAsync(cancellationToken))
+            .ConvertAll(x => new DailyClicks(x.Day, x.Clicks));
+
+        var window = _db.ClickEvents.AsNoTracking().Where(x => x.Code == code && x.OccurredAt >= fromInclusive);
         var unique = await window.Where(x => x.VisitorHash != null).Select(x => x.VisitorHash).Distinct().LongCountAsync(cancellationToken);
 
         // Order and limit in SQL on the aggregate itself; EF cannot translate ordering by a member
@@ -93,14 +135,6 @@ internal sealed class DbLinkStatsReader : ILinkStatsReader
             .Select(g => new { Name = g.Key, Count = g.LongCount() })
             .ToListAsync(cancellationToken))
             .ConvertAll(x => new NamedCount(x.Name, x.Count));
-
-        // Day bucketing in memory: date functions differ per provider and on SQLite's binary-encoded column.
-        var timestamps = await window.Select(x => x.OccurredAt).ToListAsync(cancellationToken);
-        var daily = timestamps
-            .GroupBy(t => DateOnly.FromDateTime(t.UtcDateTime))
-            .OrderBy(g => g.Key)
-            .Select(g => new DailyClicks(g.Key, g.LongCount()))
-            .ToList();
 
         return new LinkStatsData(total, unique, daily, referrers, agents);
     }

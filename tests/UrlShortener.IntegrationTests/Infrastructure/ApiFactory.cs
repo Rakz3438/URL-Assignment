@@ -71,3 +71,23 @@ internal static class HttpExtensions
         return client.SendAsync(request);
     }
 }
+
+internal static class Eventually
+{
+    /// <summary>Polls until <paramref name="condition"/> holds or the deadline passes. Analytics is eventually
+    /// consistent by design (A-7), so tests wait for the pipeline instead of sleeping a fixed time.</summary>
+    public static async Task<T> GetAsync<T>(Func<Task<T>> probe, Func<T, bool> condition, TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(10));
+        while (true)
+        {
+            var value = await probe();
+            if (condition(value) || DateTime.UtcNow > deadline)
+            {
+                return value;
+            }
+
+            await Task.Delay(50);
+        }
+    }
+}

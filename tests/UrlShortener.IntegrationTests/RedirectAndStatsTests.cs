@@ -70,7 +70,10 @@ public class RedirectAndStatsTests : IClassFixture<ApiFactory>
         await ClickAsync(link.Code, "https://news.example.org/", "Mozilla/5.0 Firefox/121.0");
         await ClickAsync(link.Code, null, "curl/8.4.0");
 
-        var stats = await _client.GetFromJsonAsync<LinkStatsResponse>($"/api/v1/links/{link.Code}/stats", Json);
+        // Clicks flow through the background pipeline (URL-11): wait for ingestion, bounded by a deadline.
+        var stats = await Eventually.GetAsync(
+            () => _client.GetFromJsonAsync<LinkStatsResponse>($"/api/v1/links/{link.Code}/stats", Json),
+            s => s!.TotalClicks >= 4);
 
         stats!.TotalClicks.Should().Be(4);
         stats.TopReferrers.Should().HaveCount(2);

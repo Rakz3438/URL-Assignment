@@ -56,6 +56,23 @@ namespace UrlShortener.Infrastructure.Persistence.Migrations.Postgres
                     b.ToTable("click_events", (string)null);
                 });
 
+            modelBuilder.Entity("UrlShortener.Domain.Analytics.LinkDailyStat", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<long>("Clicks")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Code", "Day");
+
+                    b.ToTable("link_daily_stats", (string)null);
+                });
+
             modelBuilder.Entity("UrlShortener.Domain.Links.ShortLink", b =>
                 {
                     b.Property<Guid>("Id")
