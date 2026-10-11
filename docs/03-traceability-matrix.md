@@ -30,7 +30,7 @@ at the end of the greenfield scenario.
 | A-4 | API key on management, public redirect | ✅ | Fixed-time compare; 401 tests incl. wrong key; startup fails without a 16+ char key |
 | A-5 | Analytics scope | ✅ | As FR-7 |
 | A-6 | No raw IP; keyed hash | ✅ | Note 4 resolved: A-6 amended and re-signed |
-| A-7 | Eventually consistent analytics | ⏳ URL-11 | Currently synchronous by design (the "legacy" baseline) |
+| A-7 | Eventually consistent analytics | ✅ | Kafka pipeline; worker caught up within 10–18 s after 25k req/s bursts; integration tests wait with a deadline |
 | A-8 | URL safety policy | ✅ | 36 test cases in `UrlPolicyTests` + 3 at HTTP level. Residual risk: no DNS resolution (documented) |
 | A-9 | 404 unknown/deleted, 410 expired | ✅ | Tests for all three |
 | A-10 | Reliability features | 🟡 | Idempotent create ✅. Degradation, retries, circuit breaker, rate limiting, health probes ⏳ URL-15/16/18 |
@@ -40,8 +40,8 @@ at the end of the greenfield scenario.
 
 | ID | Requirement | Status | Note |
 |---|---|---|---|
-| NFR-1 | Redirect p95 < 20 ms on cache hit | ⏳ URL-12/22 | Not measured yet |
-| NFR-2 | Redirect survives Redis/Kafka outage | ⏳ URL-16 | Redis/Kafka not introduced yet |
+| NFR-1 | Redirect p95 < 20 ms on cache hit | ✅ | **p95 3.10 ms** at 24.8k req/s (baseline 9.64 ms). Local-only measurement |
+| NFR-2 | Redirect survives Redis/Kafka outage | ✅ | Chaos tests: Kafka down, 0 errors and 0 clicks lost (after fix); Redis down, 0 errors. Redis log flood → URL-16 |
 | NFR-3 | Stateless, any instance serves any request | 🟡 | True with PostgreSQL. `MigrateOnStartup` with several replicas could race: run migrations as a pre-deploy job (URL-21) |
 | NFR-4 | Validation, API key, rate limiting, no secrets in source, dependency scan | 🟡 | Rate limiting ⏳ URL-15. Dependency scan ✅ (caught and fixed CVE-2025-6965). Dev-only key lives in `appsettings.Development.json`; production startup refuses to run without configured keys and salt |
 | NFR-5 | JSON logs, correlation ID, OTel, health endpoints | ⏳ URL-18 | Not started. Known issue, now measured: 20 handled 409 conflicts produced 40 Error-level EF Core log entries and 0 real errors (false alerts) |
@@ -54,9 +54,10 @@ at the end of the greenfield scenario.
 |---|---|
 | Code collision → retry ×5, then 500 | ✅ `CreateAsync_GeneratedCodeCollides_*`, `CreateAsync_AllAttemptsCollide_*` |
 | Concurrent identical alias → one 201, rest 409 | ✅ 20 parallel requests over HTTP + real SQLite |
-| Redis down / Kafka down / DB down | ⏳ URL-16 |
+| Redis down / Kafka down | ✅ Chaos tests 2–3 + integration tests | 
+| DB down | ⏳ URL-16 |
 | Abuse → 429 | ⏳ URL-15 |
-| Duplicate event delivery | ⏳ URL-11 |
+| Duplicate event delivery | ✅ `EfClickIngestorTests` + chaos test 4 (worker SIGKILL): raw = aggregates |
 
 ## Notes (deviations, with the engineer's decisions)
 

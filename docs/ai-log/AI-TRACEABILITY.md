@@ -34,6 +34,11 @@ in `CLAUDE.md`.
 | 21 | 2026-10-11 | URL-5, NFR-6 | Verify the unverified claim: PostgreSQL mode | Ran API against PostgreSQL 16 in Docker, config-only switch; exercised every endpoint + 20-way race; inspected schema and migration history | **Accepted** | Claim now verified. Also quantified known issue 18 (40 Error log lines for 20 expected conflicts, 0 unhandled exceptions) instead of assuming |
 | 22 | 2026-10-11 | URL-10 | Impact analysis + baseline measurement | Data-flow map, impacted-components table, k6 load test, incident simulation (10 s lock on analytics table), failing-first decoupling test | **Accepted** | Evidence-based rather than asserted: −68% throughput and 10 s stalls under an analytics-only lock; analytics failure → 500 on redirect. The latter is the genuine URL-13 defect |
 | 23 | 2026-10-11 | URL-11 | Revisit own plan: "Kafka down → DB outbox" | AI's earlier plan (Phase 0) proposed a transactional outbox for clicks | **Rejected** (own plan) | An outbox needs a business transaction to attach to; the redirect has none, so it would put a synchronous DB write back on the hot path (P1–P3). Proposed bounded buffer + background publish instead; awaiting engineer sign-off |
+| 24 | 2026-10-11 | URL-11/12 | Implement approved design (Option C + cache-aside) | Sink/ingestor/cache ports, channel, publisher, Kafka producer/consumer, worker, aggregates + backfill migration, Redis/Kafka compose | **Edited** | Architecture test caught 12 pipeline types made `public` unnecessarily, so they were made internal. Redis package downgraded 8.0.31 → 8.0.11 to stay on the EF Core 8.0.11 dependency train; vuln scan clean |
+| 25 | 2026-10-11 | URL-11 | Verify "Kafka down → clicks delivered later" | Chaos test: 61% of clicks lost | **Rejected** (own implementation) | Root-caused with `dotnet-counters` (enqueued = published + dropped, exact). AI's publisher awaited acks per batch (head-of-line blocking). Rewrote to non-blocking `Produce` + bounded librdkafka queue; re-test 0 lost. Added drop warnings to logs |
+| 26 | 2026-10-11 | URL-12 | Verify "Redis down → redirect unaffected" | 0 errors, but 2,500 warnings in 10 s | **Deferred → URL-16** | Correct behavior, noisy operations. Circuit breaker belongs to URL-16; not expanding this change |
+| 27 | 2026-10-11 | URL-11 | Data migration for legacy clicks | Hand-written backfill SQL in the PostgreSQL migration | **Accepted** | Verified on real legacy data: 295,942 → 295,942. SQLite backfill intentionally omitted (dev-only), documented |
+| 28 | 2026-10-11 | URL-13 | Genuine brownfield defect | Analytics failure → 500 on redirect (failing-first test) | **Accepted** | Fixed by decoupling; regression tests for failing, hanging and cache-down cases |
 
 ## High-impact sign-off register
 
@@ -46,4 +51,7 @@ in `CLAUDE.md`.
 | A-8 | URL safety policy as specified | Rakz3438 | 2026-10-11 |
 | A-6 (amended) | HMAC-SHA256 of IP + UA instead of salted SHA-256 of IP | Rakz3438 | 2026-10-11 |
 | Greenfield URL-1…9 (incl. 🔒 URL-3, URL-4, URL-5) | Approved for commit after review of code, AI log entries 9–20 and traceability matrix | Rakz3438 | 2026-10-11 |
+| URL-11 delivery semantics | Option C: bounded in-memory buffer → background batch publish to Kafka; at-least-once consumer with idempotent writes; outbox rejected for the redirect path | Rakz3438 | 2026-10-11 |
+| URL-12 cache design | Cache-aside, TTL ≤ min(5 min, expiry), write-through on create, invalidate on delete, fall back to DB on cache errors, no negative caching | Rakz3438 | 2026-10-11 |
+| Brownfield URL-10…13 (incl. 🔒 URL-11 implementation) | Approved for commit after review of results, defects found, trade-offs and AI log entries 22–28 | Rakz3438 | 2026-10-11 |
 | FR-5 / FR-8 changes | Aliases stored lowercase; idempotent replay returns identical 201 + `Idempotent-Replayed` header | Rakz3438 | 2026-10-11 |

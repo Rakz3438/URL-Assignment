@@ -3,9 +3,9 @@
 A production-shaped URL shortener in **.NET 8 / ASP.NET Core**, built with Claude Code and GitHub Copilot
 under engineer-led controls (spec-first, traceability log, quality gates, human sign-off).
 
-> Status: **greenfield core complete** (create / get / delete / redirect / stats, API-key auth,
-> idempotency, URL safety policy). Brownfield (Kafka event-driven analytics, Redis caching) and
-> ambiguous-requirement scenarios are next. See [docs/02-task-breakdown.md](docs/02-task-breakdown.md).
+> Status: **greenfield ✅, brownfield ✅** (Kafka event-driven analytics, Redis cache, Analytics Worker:
+> 3.3× throughput, p95 9.6 → 3.1 ms, redirects unaffected by analytics/Kafka/Redis outages). Ambiguous scenario next.
+> See [docs/scenarios/02-brownfield.md](docs/scenarios/02-brownfield.md).
 
 ## Quick start (zero setup: SQLite, no Docker)
 
@@ -28,6 +28,20 @@ curl -i http://localhost:5080/dotnet-docs
 
 # Analytics
 curl -s http://localhost:5080/api/v1/links/dotnet-docs/stats -H "X-Api-Key: dev-api-key-change-me"
+```
+
+## Full infrastructure mode (PostgreSQL + Redis + Kafka + Analytics Worker)
+
+Requires Docker. Same code, switched by environment variables only:
+
+```bash
+./scripts/run-full-local.sh
+```
+
+Load test (k6 runs in Docker, nothing to install):
+
+```bash
+docker run --rm -i -e BASE_URL=http://host.docker.internal:5080 -e CODE=<code> grafana/k6:0.54.0 run - < loadtest/redirect.js
 ```
 
 ## API
