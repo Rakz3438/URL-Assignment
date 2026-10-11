@@ -1,0 +1,61 @@
+# CI quality gate (URL-20). Same checks as ./scripts/quality-gate.sh, so "works locally" == "passes CI".
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read   # least privilege: CI only reads the repo
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore local tools
+        run: dotnet tool restore
+      - name: Quality gate (format, analyzers, tests + coverage threshold, vulnerability scan)
+        run: ./scripts/quality-gate.sh
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: TestResults/**/coverage.cobertura.xml
+          retention-days: 14
+
+  container-images:
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -f src/UrlShortener.Api/Dockerfile -t urlshortener-api:ci .
+      - name: Build worker image
+        run: docker build -f src/UrlShortener.AnalyticsWorker/Dockerfile -t urlshortener-worker:ci .
+      - name: Images run as non-root
+        run: |
+          for img in urlshortener-api:ci urlshortener-worker:ci; do
+            user=$(docker image inspect "$img" --format '{{.Config.User}}')
+            echo "$img runs as: $user"
+            if [ -z "$user" ] || [ "$user" = "root" ] || [ "$user" = "0" ]; then echo "::error::$img runs as root"; exit 1; fi
+          done
+
+  kubernetes-manifests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manifests against Kubernetes schemas
+        run: docker run --rm -v "$PWD/k8s:/k8s:ro" ghcr.io/yannh/kubeconform:v0.6.7 -strict -summary -kubernetes-version 1.30.0 /k8s
