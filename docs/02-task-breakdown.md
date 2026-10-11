@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | **DRAFT — awaiting engineer sign-off** |
+| Status | **APPROVED by engineer (Rakz3438), 2026-10-11** |
 | Import | [`jira-backlog.csv`](jira-backlog.csv) can be imported into Jira (Issue Type, Summary, Epic Link, Description, Story Points, Labels) |
 
 Hierarchy: **Epic → Story → Task**. Each story has acceptance criteria (AC), dependencies, and an

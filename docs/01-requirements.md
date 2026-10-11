@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | **DRAFT — awaiting engineer sign-off** |
+| Status | **APPROVED by engineer (Rakz3438), 2026-10-11** |
 | Owner | Engineer (candidate) |
 | AI role | Drafted by Claude Code from the assignment brief + JD; reviewed/edited by engineer |
 | Last updated | 2026-10-11 |
@@ -123,8 +123,8 @@ Rows marked ⚠️ are **high-impact** and need explicit engineer sign-off.
 
 | Item | Decision | Engineer approval |
 |---|---|---|
-| A-1 Code generation | Random Base62, 7 chars | ☐ |
-| A-2 Redirect status | 302 | ☐ |
-| A-4 Auth model | API key | ☐ |
-| A-6 Privacy | Hashed IP, no raw IP | ☐ |
-| A-8 URL safety policy | As specified | ☐ |
+| A-1 Code generation | Random Base62, 7 chars | ✅ Approved 2026-10-11 |
+| A-2 Redirect status | 302 | ✅ Approved 2026-10-11 |
+| A-4 Auth model | API key | ✅ Approved 2026-10-11 |
+| A-6 Privacy | Hashed IP, no raw IP | ✅ Approved 2026-10-11 |
+| A-8 URL safety policy | As specified | ✅ Approved 2026-10-11 |
