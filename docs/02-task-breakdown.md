@@ -30,7 +30,7 @@ Critical path: URL-1 → URL-3 → URL-4 → URL-5 → URL-10 → URL-11 → URL
 
 | ID | Story | Depends on | AC | AI plan |
 |---|---|---|---|---|
-| URL-1 | Solution skeleton: `Api`, `Application`, `Domain`, `Infrastructure`, `AnalyticsWorker`, test projects | — | `dotnet build` passes with `TreatWarningsAsErrors`; project references enforce layer direction (Domain has no dependencies) | AI scaffolds; engineer verifies the dependency direction |
+| URL-1 | Solution skeleton: `Api`, `Application`, `Domain`, `Infrastructure`, test projects (`AnalyticsWorker` deferred to URL-11, where it is introduced) | — | `dotnet build` passes with `TreatWarningsAsErrors`; project references enforce layer direction (Domain has no dependencies) | AI scaffolds; engineer verifies the dependency direction |
 | URL-2 | AI governance: `CLAUDE.md`, `copilot-instructions.md`, AI traceability log, PR template with AI disclosure | — | Files exist and are referenced from README | AI drafts; engineer edits rules |
 
 ## E1 — Greenfield: core service (Scenario 1)
@@ -52,7 +52,12 @@ Critical path: URL-1 → URL-3 → URL-4 → URL-5 → URL-10 → URL-11 → URL
 | URL-10 | Impact analysis: map redirect data flow, identify coupling, measure baseline latency | URL-9 | Written analysis + baseline load-test numbers | AI analyses code; engineer validates findings |
 | URL-11 🔒 | Event-driven analytics: `LinkClicked` event → transactional outbox → Kafka → Analytics Worker → aggregates. In-process channel fallback for zero-setup mode | URL-10 | Redirect no longer writes click rows synchronously; worker is idempotent by event ID; stats still correct (eventually) | AI drafts producer/consumer; engineer reviews delivery semantics (at-least-once + idempotent consumer) |
 | URL-12 | Cache-aside for redirect lookups (`IDistributedCache`, Redis in full mode) with invalidation on delete | URL-10 | Cache hit avoids DB; delete invalidates cache; before/after load-test numbers | AI drafts; engineer reviews invalidation and TTL vs expiry |
-| URL-13 | **Bug fix:** concurrent custom-alias race | URL-6 | Regression test fires parallel creates; exactly one 201, rest 409 | AI reproduces; engineer confirms root cause |
+| URL-13 | **Bug fix:** a real defect found during brownfield work, fixed test-first (see note) | URL-6 | Failing regression test first, then fix | AI reproduces; engineer confirms root cause |
+
+> **Note on URL-13 (changed during execution).** The concurrent-alias race was originally planned as the
+> brownfield bug. During greenfield work it was prevented by design (DB unique index, no check-then-insert)
+> and proven by an integration test with 20 parallel requests. Seeding an artificial bug to "find" later
+> would misrepresent the work, so URL-13 now covers a genuine defect discovered during the brownfield changes.
 
 ## E3 — Ambiguous: "make links safe and reliable" (Scenario 3)
 
@@ -62,7 +67,7 @@ Critical path: URL-1 → URL-3 → URL-4 → URL-5 → URL-10 → URL-11 → URL
 | URL-15 | Rate limiting (per-client, separate policies for create vs redirect) | URL-14 | 429 + `Retry-After` beyond limit; tested | AI drafts |
 | URL-16 | Resilience: Polly retry + circuit breaker around cache and Kafka; degrade gracefully | URL-14 | Tests with failing fakes prove redirect still works | AI drafts; engineer reviews timeouts and budgets |
 | URL-17 | Expiry enforcement + 410; cache TTL never exceeds link expiry | URL-14 | Tests at expiry boundary | AI drafts edge-case tests |
-| URL-18 | Observability: Serilog JSON, correlation ID, OpenTelemetry, health live/ready | URL-14 | Logs are JSON with correlation ID; readiness fails when DB is down | AI drafts |
+| URL-18 | Observability: Serilog JSON, correlation ID, OpenTelemetry, health live/ready; `ForwardedHeaders` with explicit trusted proxies (real client IP for visitor hashing) | URL-14 | Logs are JSON with correlation ID; readiness fails when DB is down; unique visitors correct behind the compose/K8s proxy; spoofed `X-Forwarded-For` from untrusted sources ignored | AI drafts; engineer reviews trusted-proxy list |
 
 ## E4 — Delivery
 
