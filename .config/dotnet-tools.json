@@ -8,6 +8,13 @@
         "dotnet-ef"
       ],
       "rollForward": false
+    },
+    "dotnet-counters": {
+      "version": "8.0.547301",
+      "commands": [
+        "dotnet-counters"
+      ],
+      "rollForward": false
     }
   }
 }
