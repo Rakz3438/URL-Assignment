@@ -44,8 +44,8 @@ at the end of the greenfield scenario.
 | NFR-2 | Redirect survives Redis/Kafka outage | ⏳ URL-16 | Redis/Kafka not introduced yet |
 | NFR-3 | Stateless, any instance serves any request | 🟡 | True with PostgreSQL. `MigrateOnStartup` with several replicas could race: run migrations as a pre-deploy job (URL-21) |
 | NFR-4 | Validation, API key, rate limiting, no secrets in source, dependency scan | 🟡 | Rate limiting ⏳ URL-15. Dependency scan ✅ (caught and fixed CVE-2025-6965). Dev-only key lives in `appsettings.Development.json`; production startup refuses to run without configured keys and salt |
-| NFR-5 | JSON logs, correlation ID, OTel, health endpoints | ⏳ URL-18 | Not started. Known issue: EF Core logs handled 409 conflicts at Error level (false alerts) |
-| NFR-6 | Zero-setup mode **and** full-infra mode | 🟡 | Zero-setup ✅ verified by smoke run. **PostgreSQL mode is configured and its migration generated, but never executed**, because Docker is not installed. Unverified until URL-19 |
+| NFR-5 | JSON logs, correlation ID, OTel, health endpoints | ⏳ URL-18 | Not started. Known issue, now measured: 20 handled 409 conflicts produced 40 Error-level EF Core log entries and 0 real errors (false alerts) |
+| NFR-6 | Zero-setup mode **and** full-infra mode | 🟡 | Zero-setup ✅. **PostgreSQL mode ✅ verified 2026-10-11** against PostgreSQL 16.15 in Docker, switched by environment variables only: migration applied; unique indexes present; all endpoints, 20-way alias race (1×201, 19×409), idempotent replay, expiry stored as UTC, stats and delete behave as on SQLite. Full compose stack (Redis, Kafka, worker) ⏳ URL-19 |
 | NFR-7 | Layers, analyzers, ≥ 80% coverage | ✅ | Architecture tests; warnings as errors; coverage **enforced** in the gate (added in this audit). Domain 92.0%, Application 97.9% |
 
 ## Failure scenarios (§8)
