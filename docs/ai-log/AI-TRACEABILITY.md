@@ -17,7 +17,6 @@ in `CLAUDE.md`.
 | 4 | 2026-10-11 | URL-2 | Draft requirement normalization from a one-line brief | `docs/01-requirements.md` with 11 ambiguity decisions | **Accepted** | Reviewed by engineer; all 5 high-impact decisions approved without change |
 | 5 | 2026-10-11 | URL-2 | Draft Jira-style decomposition with dependencies | `docs/02-task-breakdown.md`, `jira-backlog.csv` | **Accepted** | Reviewed by engineer; all 5 high-impact decisions approved without change |
 | 6 | 2026-10-11 | URL-2 | Draft AI custom instructions | `CLAUDE.md`, `.github/copilot-instructions.md` | **Accepted** | Reviewed by engineer; all 5 high-impact decisions approved without change |
-
 | 7 | 2026-10-11 | — | Push to GitHub | First push failed (no CLI credentials); then found the repo URL did not exist (404) | **Edited** | Engineer chose to have the AI create a **private** repo via the browser after engineer signed in; final push done by engineer via GitHub Desktop (engineer controls what leaves the machine) |
 | 8 | 2026-10-11 | — | Self-correction | AI had claimed the repo was public based on a flawed check (exit code of `head`, not `git`) | **Rejected** (own claim) | Re-verified with the GitHub API (404 → private or missing). Lesson: verify the exit code of the command that matters |
 
