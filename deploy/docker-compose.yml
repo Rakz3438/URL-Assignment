@@ -63,5 +63,15 @@ services:
       - /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic link-clicks --partitions 6 --replication-factor 1 --config retention.ms=604800000
     restart: "no"
 
+  # Optional: OpenTelemetry viewer for logs, metrics and traces (Scenario 3, R3).
+  #   docker compose -f deploy/docker-compose.yml --profile observability up -d
+  # UI: http://localhost:18888   OTLP endpoint for the apps: http://localhost:4317
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:8.1
+    profiles: ["observability"]
+    environment:
+      DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true" # local development only
+    ports: ["18888:18888", "4317:18889"]
+
 volumes:
   pgdata:
